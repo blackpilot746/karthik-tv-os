@@ -1,0 +1,196 @@
+
+name: Build Karthik TV OS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Create Android project
+        run: |
+          mkdir -p app/src/main/java/com/karthik/tvos
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "KarthikTVOS"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.karthik.tvos'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.karthik.tvos'
+                  minSdk 23
+                  targetSdk 28
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-feature android:name="android.software.leanback" android:required="false"/>
+              <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+              <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+              <application
+                  android:theme="@android:style/Theme.Material.NoActionBar"
+                  android:label="Karthik TV OS"
+                  android:banner="@android:drawable/sym_def_app_icon">
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="landscape"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.HOME"/>
+                          <category android:name="android.intent.category.DEFAULT"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/karthik/tvos/MainActivity.java <<'EOF'
+          package com.karthik.tvos;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.graphics.Color;
+          import android.view.Gravity;
+          import android.view.View;
+          import android.widget.*;
+
+          public class MainActivity extends Activity {
+              @Override
+              public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  getWindow().setStatusBarColor(Color.rgb(8,12,25));
+                  getWindow().setNavigationBarColor(Color.rgb(8,12,25));
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(1);
+                  root.setPadding(55,35,55,30);
+                  root.setBackgroundColor(Color.rgb(8,12,25));
+
+                  TextView brand = new TextView(this);
+                  brand.setText("KARTHIK TV");
+                  brand.setTextColor(Color.WHITE);
+                  brand.setTextSize(30);
+                  root.addView(brand);
+
+                  TextView heading = new TextView(this);
+                  heading.setText("Your entertainment starts here.");
+                  heading.setTextColor(Color.LTGRAY);
+                  heading.setTextSize(20);
+                  heading.setPadding(0,15,0,25);
+                  root.addView(heading);
+
+                  TextView section = new TextView(this);
+                  section.setText("YOUR APPS");
+                  section.setTextColor(Color.WHITE);
+                  section.setTextSize(17);
+                  root.addView(section);
+
+                  LinearLayout apps = new LinearLayout(this);
+                  apps.setOrientation(LinearLayout.HORIZONTAL);
+
+                  String[] names = {"YouTube", "Netflix", "Prime Video", "Settings"};
+                  for (String name : names) {
+                      Button button = new Button(this);
+                      button.setText(name);
+                      button.setTextSize(15);
+                      button.setFocusable(true);
+                      button.setOnClickListener(v -> {
+                          if (name.equals("Settings")) {
+                              startActivity(new android.content.Intent(
+                                  android.provider.Settings.ACTION_SETTINGS));
+                              return;
+                          }
+                          android.content.Intent intent =
+                              getPackageManager().getLaunchIntentForPackage(
+                                  name.equals("YouTube") ? "com.google.android.youtube.tv" :
+                                  name.equals("Netflix") ? "com.netflix.ninja" :
+                                  "com.amazon.amazonvideo.livingroom");
+                          if (intent != null) startActivity(intent);
+                          else Toast.makeText(this, name + " not found",
+                              Toast.LENGTH_SHORT).show();
+                      });
+                      LinearLayout.LayoutParams p =
+                          new LinearLayout.LayoutParams(0,130,1);
+                      p.setMargins(5,20,5,5);
+                      apps.addView(button,p);
+                  }
+                  root.addView(apps);
+
+                  TextView footer = new TextView(this);
+                  footer.setText("KARTHIK TV OS  •  VERSION 1.0");
+                  footer.setTextColor(Color.GRAY);
+                  footer.setPadding(0,45,0,0);
+                  root.addView(footer);
+
+                  setContentView(root);
+              }
+          }
+          EOF
+
+      - name: Build APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Karthik-TV-OS-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
